@@ -241,10 +241,9 @@ def ht_to_rectangle(frame,circles,min_dis = 50):
         x2=max(ulx,urx,lrx,llx)
         y1=min(uly,ury,lry,lly)
         y2=max(uly,ury,lry,lly)
-        # cv2.rectangle(frame, (x1, y1), (x2, y2), (255,0,0), 3)
-        arr = np.array([x1,y1,x2,y2])
-        boxes.append(arr)
-        cv2.circle(frame,(a,b),r,color=color,thickness=4)
+        # cv2.rectangle(frame, (x1, y1), (x2, y2), (0,0,255), 3)
+        boxes.append([x1,y1,x2,y2])
+        # cv2.circle(frame,(a,b),r,color=color,thickness=4)
         # cv2.circle(frame, (a,b),0, color=(0, 0, 255), thickness=4) 
     
     cv2.imwrite('circle_dart1.jpg',frame)
@@ -303,13 +302,6 @@ def rectangle_intersection(box1, box2):
     # return the intersection over union value
     return iou
 
-def eval(box1,box2,iou, threshold):  
-    if(iou>=threshold):
-        x,y,w,h = combineBoundingBox(box1,box2)
-        cv2.rectangle(frame,(x,y),(x+w,y+h),(0,0,255),3)
-        cv2.imwrite('mix-detector.jpg',frame)
-        # display merge of two boxes
-
 def combineBoundingBox(box1, box2):
     x = min(box1[0], box2[0])
     y = min(box1[1], box2[1])
@@ -344,7 +336,7 @@ def check_if_intersect(box1,box2):
 #     main()
 
 #%%
-frame = cv2.imread('dart1.jpg',cv2.IMREAD_COLOR)
+frame = cv2.imread('dart0.jpg',cv2.IMREAD_COLOR)
 frame_grey = cv2.cvtColor(frame,cv2.COLOR_BGR2GRAY)  
 #%%
 smooth_img = gaussian_blur(frame_grey,3)
@@ -365,17 +357,51 @@ ht_darts = ht_to_rectangle(frame,circles)
 viola_darts = VJ_detector(frame,cascade_name)   
 # %%
 #  combining viola jones detector and circle hough transform 
+def final_box(ht_darts,viola_darts,threshold=0.3):
+    combined_boxes = []
+    for  i  in range(len(ht_darts)):
+        for j in range(len(viola_darts)):
+            if(check_if_intersect(ht_darts[i],viola_darts[j])):
+                iou = rectangle_intersection(ht_darts[i],viola_darts[j])
+                print(iou)
+                if(iou>=threshold):
+                    x,y,x1,y1 = combineBoundingBox(ht_darts[i],viola_darts[j])
+                    combined_boxes.append([x,y,x1,y1])
+    return combined_boxes
+            # viola and hough_transform combined , break from loop
 
-for  i  in range(len(ht_darts)):
-    for j in range(len(viola_darts)):
-        if(check_if_intersect(ht_darts[i],viola_darts[j])):
-            iou = rectangle_intersection(ht_darts[i],viola_darts[j])
-            print(iou)
-            eval(ht_darts[i],viola_darts[j],iou,threshold=0)
+best_box = final_box(ht_darts,viola_darts)
 
+#%%
 
+def final_display(box,v_box):
+    # best box list is empty
+    if not box:
+        # display viola-detector box
+        for i in range(len(v_box)):
+            b = v_box[i]
+            cv2.rectangle(frame,(b[0],b[1]),(b[2],b[3]),(0,255,0),3)
+    # display best boxes
+    else:
+        for i in range(len(box)):
+            b = box[i]
+            cv2.rectangle(frame,(b[0],b[1]),(b[2],b[3]),(255,0,0),3)        
+    cv2.imwrite('combined-detector.jpg',frame)
 
+final_display(best_box,viola_darts)
 
 # %%
- 
+def threshold_hough_space(hs_3d,R_min=60,R_max=80,threshold= 150):
+    a,b,r = hs_3d.shape
+    hs_copy = np.copy(hs_3d)
+    for x in range(0,a):
+        for y  in range(0,b):
+            for z in range(R_min,R_max):
+                if hs_copy[x,y,z] <=threshold:
+                   hs_copy[x,y,z] = 0 
+    return hs_copy
+trs_hs = threshold_hough_space(hs)
+trs_hs_2d = houghspace_2D(trs_hs)
+cv2.imwrite('2d-thresholded.jpg',trs_hs_2d)
+
 # %%
